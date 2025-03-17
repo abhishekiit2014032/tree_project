@@ -1,17 +1,27 @@
 import os
 import sys
 import glob
+from dotenv import load_dotenv
 from utils.geolocation import get_location
 from utils.plant_id import identify_tree_type
 from utils.image_processing import calculate_tree_dimensions
 from utils.database import TreeDatabase
 from utils.web_ui import run_web_ui
 
+# Load environment variables
+load_dotenv()
+
 # Configuration
 IMAGE_DIR = "tree_images"  # Folder containing tree images
-API_KEY = "SfUN6FnJbdmSxGyu8i7V0XaUoccEerxdCYjUGsVdCO3yvED0g4"  # Replace with your Plant.id API key
+API_KEY = os.getenv('PLANT_ID_API_KEY')  # Get API key from environment variables
 REFERENCE_HEIGHT_CM = 180  # Height of the reference object in cm
 REFERENCE_PIXEL_HEIGHT = 500  # Height of the reference object in the image (in pixels)
+
+# Check if API key is set
+if not API_KEY:
+    print("Error: PLANT_ID_API_KEY not found in environment variables!")
+    print("Please create a .env file with your Plant.id API key.")
+    sys.exit(1)
 
 # Initialize database
 db = TreeDatabase()

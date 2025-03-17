@@ -44,7 +44,12 @@ tree_images/*.bmp
 # Logs
 *.log
 
-# Local development
+# Environment variables
 .env
 .env.local
-.env.*.local 
+.env.*.local
+
+# API Keys and Secrets
+*.key
+*.pem
+*.cert 
