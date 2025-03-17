@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <img src="/image/{{ image_path }}" class="card-img-top detail-image" alt="Tree Image">
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="edit-form">
+            <h3>Edit Tree Details</h3>
+            <form id="editForm">
+                <input type="hidden" name="image_path" value="{{ image_path }}">
+                
+                <div class="mb-3">
+                    <label for="tree_type" class="form-label">Tree Type</label>
+                    <input type="text" class="form-control" id="tree_type" name="tree_type" 
+                           value="{{ result.tree_type }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="height_m" class="form-label">Height (meters)</label>
+                    <input type="number" step="0.01" class="form-control" id="height_m" name="height_m" 
+                           value="{{ result.height_m }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="width_m" class="form-label">Width (meters)</label>
+                    <input type="number" step="0.01" class="form-control" id="width_m" name="width_m" 
+                           value="{{ result.width_m }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="latitude" class="form-label">Latitude</label>
+                    <input type="text" class="form-control" id="latitude" name="latitude" 
+                           value="{{ result.latitude }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="longitude" class="form-label">Longitude</label>
+                    <input type="text" class="form-control" id="longitude" name="longitude" 
+                           value="{{ result.longitude }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="confidence" class="form-label">Confidence (%)</label>
+                    <input type="number" step="0.01" class="form-control" id="confidence" name="confidence" 
+                           value="{{ result.confidence }}" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+                <a href="/" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to List
+                </a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#editForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            image_path: $('input[name="image_path"]').val(),
+            tree_type: $('#tree_type').val(),
+            height_m: $('#height_m').val(),
+            width_m: $('#width_m').val(),
+            latitude: $('#latitude').val(),
+            longitude: $('#longitude').val(),
+            confidence: $('#confidence').val()
+        };
+        
+        $.ajax({
+            url: '/api/update_tree',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                if (response.status === 'success') {
+                    alert('Changes saved successfully!');
+                    window.location.href = '/';
+                } else {
+                    alert('Error saving changes: ' + response.message);
+                }
+            },
+            error: function(xhr) {
+                alert('Error saving changes: ' + xhr.responseJSON.message);
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 
