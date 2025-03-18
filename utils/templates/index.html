@@ -65,11 +65,11 @@
                                  class="tree-image">
                         </td>
                         <td>{{ tree.tree_type }}</td>
-                        <td>{{ tree.height_m }}</td>
-                        <td>{{ tree.width_m }}</td>
+                        <td>{{ "%.2f"|format(tree.height_m|float) }}</td>
+                        <td>{{ "%.2f"|format(tree.width_m|float) }}</td>
                         <td>
                             {% if tree.latitude != "NO DATA" and tree.longitude != "NO DATA" %}
-                                {{ tree.latitude }}, {{ tree.longitude }}
+                                {{ "%.6f"|format(tree.latitude|float) }}, {{ "%.6f"|format(tree.longitude|float) }}
                             {% else %}
                                 No GPS Data
                             {% endif %}
@@ -78,7 +78,7 @@
                             <span class="{% if tree.confidence >= 80 %}confidence-high
                                        {% elif tree.confidence >= 50 %}confidence-medium
                                        {% else %}confidence-low{% endif %}">
-                                {{ "%.1f"|format(tree.confidence) }}%
+                                {{ "%.1f"|format(tree.confidence|float) }}%
                             </span>
                         </td>
                         <td>

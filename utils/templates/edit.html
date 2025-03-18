@@ -42,7 +42,7 @@
                                    class="form-control" 
                                    id="height_m" 
                                    name="height_m" 
-                                   value="{{ tree.height_m }}" 
+                                   value="{{ "%.2f"|format(tree.height_m|float) }}" 
                                    step="0.01" 
                                    required>
                         </div>
@@ -52,7 +52,7 @@
                                    class="form-control" 
                                    id="width_m" 
                                    name="width_m" 
-                                   value="{{ tree.width_m }}" 
+                                   value="{{ "%.2f"|format(tree.width_m|float) }}" 
                                    step="0.01" 
                                    required>
                         </div>
@@ -65,7 +65,7 @@
                                    class="form-control" 
                                    id="latitude" 
                                    name="latitude" 
-                                   value="{{ tree.latitude }}" 
+                                   value="{{ "%.6f"|format(tree.latitude|float) if tree.latitude != 'NO DATA' else 'NO DATA' }}" 
                                    required>
                         </div>
                         <div class="col-md-6">
@@ -74,7 +74,7 @@
                                    class="form-control" 
                                    id="longitude" 
                                    name="longitude" 
-                                   value="{{ tree.longitude }}" 
+                                   value="{{ "%.6f"|format(tree.longitude|float) if tree.longitude != 'NO DATA' else 'NO DATA' }}" 
                                    required>
                         </div>
                     </div>
@@ -85,7 +85,7 @@
                                class="form-control" 
                                id="confidence" 
                                name="confidence" 
-                               value="{{ tree.confidence }}" 
+                               value="{{ "%.1f"|format(tree.confidence|float) }}" 
                                min="0" 
                                max="100" 
                                step="0.1" 

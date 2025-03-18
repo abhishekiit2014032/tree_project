@@ -5,7 +5,11 @@ import pandas as pd
 from io import BytesIO
 from .database import TreeDatabase
 
-app = Flask(__name__)
+# Get the absolute path to the tree_images directory
+TREE_IMAGES_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_images'))
+
+# Initialize Flask app with the correct static folder
+app = Flask(__name__, static_folder=TREE_IMAGES_DIR, static_url_path='/images')
 db = TreeDatabase()
 
 @app.route('/')
@@ -98,7 +102,11 @@ def edit_tree(image_name):
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     """Serve static files (images)"""
-    return send_from_directory('tree_images', filename)
+    try:
+        return send_from_directory(TREE_IMAGES_DIR, filename, as_attachment=False)
+    except Exception as e:
+        print(f"Error serving image {filename}: {str(e)}")
+        return str(e), 404
 
 @app.route('/tree/<path:image_path>')
 def tree_details(image_path):
