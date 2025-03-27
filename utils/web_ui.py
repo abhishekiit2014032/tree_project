@@ -74,12 +74,57 @@ def serve_image(filename):
         return str(e), 404
 
 @app.route('/export')
-def export_excel():
-    """Export tree data to Excel"""
+def export_to_excel():
     try:
-        get_db().export_to_excel()
-        return send_file('tree_analysis.xlsx', as_attachment=True)
+        # Get all trees from database
+        results = get_db().get_all_trees()
+        
+        # Create a DataFrame
+        data = []
+        for i, result in enumerate(results, start=1):
+            # Extract filename from image_path
+            image_name = os.path.basename(result[1])
+            data.append({
+                'ID': i,  # Use sequential ID starting from 1
+                'Image Name': image_name,
+                'Tree Type': result[3],
+                'Height (m)': f"{result[4]:.2f}",  # Format to 2 decimal places
+                'Width (m)': f"{result[5]:.2f}",   # Format to 2 decimal places
+                'Latitude': f"{result[6]:.6f}" if result[6] else "",
+                'Longitude': f"{result[7]:.6f}" if result[7] else "",
+                'Processed Date': result[8]
+            })
+        
+        df = pd.DataFrame(data)
+        
+        # Create Excel writer
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Tree Analysis')
+            
+            # Auto-adjust column widths
+            worksheet = writer.sheets['Tree Analysis']
+            for idx, col in enumerate(df.columns):
+                max_length = max(
+                    df[col].astype(str).apply(len).max(),
+                    len(str(col))
+                )
+                worksheet.column_dimensions[chr(65 + idx)].width = max_length + 2
+        
+        output.seek(0)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'tree_analysis_{timestamp}.xlsx'
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
     except Exception as e:
+        print(f"Error exporting to Excel: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/static/<path:filename>')
