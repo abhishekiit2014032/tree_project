@@ -179,4 +179,124 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - OpenCV for image processing
 - Flask for web interface
 - Bootstrap for UI components
-- SQLite for database management 
+- SQLite for database management
+
+# Tree Identification System
+
+A system for identifying tree types from images using various pre-trained deep learning models.
+
+## Model System
+
+The system uses a modular approach to handle different pre-trained models for tree identification. This allows for easy testing and comparison of different models.
+
+### Model Manager
+
+The `ModelManager` class in `utils/model_manager.py` handles all model-related operations:
+
+- Loading different pre-trained models
+- Managing model configurations
+- Processing images for model input
+- Making predictions with confidence scores
+
+### Adding New Models
+
+To add a new model:
+
+1. Place your model file (`.pt` or `.pth`) in the `models` directory
+2. Create a corresponding labels file (`.txt`) with one label per line
+3. Add the model configuration to the `model_configs` dictionary in `ModelManager`:
+
+```python
+"model_name": {
+    "model_path": "path/to/model.pt",
+    "labels_path": "path/to/labels.txt",
+    "input_size": (224, 224),  # Required input size
+    "confidence_threshold": 0.15,  # Minimum confidence for prediction
+    "description": "Description of the model"
+}
+```
+
+### Available Models
+
+Currently available models:
+
+1. DenseNet
+   - Model file: `models/UrbanTreeDenseNet.pt`
+   - Labels file: `models/tree_labels.txt`
+   - Input size: 224x224
+   - Confidence threshold: 15%
+
+### Model Configuration
+
+Each model configuration should include:
+
+- `model_path`: Path to the model file
+- `labels_path`: Path to the labels file
+- `input_size`: Required input image size (width, height)
+- `confidence_threshold`: Minimum confidence score for valid prediction
+- `description`: Description of the model and its training
+
+### Testing New Models
+
+To test a new model:
+
+1. Add the model configuration to `model_configs`
+2. Load the model using `model_manager.load_model("model_name")`
+3. Test predictions using `model_manager.identify_tree_type(image_path)`
+
+### Example
+
+```python
+from utils.model_manager import ModelManager
+
+# Initialize model manager
+model_manager = ModelManager()
+
+# Load a specific model
+model_manager.load_model("densenet")
+
+# Make predictions
+tree_type, confidence = model_manager.identify_tree_type("path/to/image.jpg")
+```
+
+## Requirements
+
+- Python 3.7+
+- PyTorch
+- torchvision
+- Pillow
+- Flask (for web interface)
+
+## Installation
+
+1. Clone the repository
+2. Install requirements:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Place model files in the `models` directory
+4. Run the application:
+   ```bash
+   python driver_script.py
+   ```
+
+## Usage
+
+1. Place tree images in the `tree_images` directory
+2. Run the application
+3. Access the web interface at http://localhost:5000
+
+## Contributing
+
+To add a new model:
+
+1. Train your model on tree images
+2. Save the model file in the `models` directory
+3. Create a labels file
+4. Add the model configuration to `ModelManager`
+5. Test the model
+6. Submit a pull request with your changes
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 

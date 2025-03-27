@@ -5,87 +5,65 @@ from PIL.ExifTags import TAGS, GPSTAGS
 import os
 
 def get_exif_data(image_path):
-    """
-    Extract EXIF data from an image file.
-    """
+    """Extract EXIF data from image"""
     try:
         image = Image.open(image_path)
         exif = image._getexif()
-        if not exif:
-            print(f"No EXIF data found in {image_path}")
+        if exif is None:
             return None
-            
-        exif_data = {}
-        for tag_id in exif:
-            tag = TAGS.get(tag_id, tag_id)
-            data = exif.get(tag_id)
-            if isinstance(data, bytes):
-                data = data.decode(errors='replace')
-            exif_data[tag] = data
-        return exif_data
+        return {TAGS.get(tag, tag): value for tag, value in exif.items()}
     except Exception as e:
-        print(f"Error reading EXIF data: {str(e)}")
+        print(f"Error extracting EXIF data: {str(e)}")
         return None
 
 def convert_to_degrees(value):
-    """
-    Convert GPS coordinates to decimal degrees.
-    """
+    """Convert GPS coordinates to degrees"""
+    d = float(value[0])
+    m = float(value[1])
+    s = float(value[2])
+    return d + (m / 60.0) + (s / 3600.0)
+
+def extract_gps_data(image_path):
+    """Extract GPS coordinates from image EXIF data"""
     try:
-        d = float(value[0])
-        m = float(value[1])
-        s = float(value[2])
-        return d + (m / 60.0) + (s / 3600.0)
-    except Exception as e:
-        print(f"Error converting to degrees: {str(e)}")
+        print(f"\nExtracting GPS data from: {image_path}")
+        exif = get_exif_data(image_path)
+        if not exif:
+            return None
+
+        gps_info = {}
+        for key, value in exif.items():
+            decoded = TAGS.get(key, key)
+            if decoded == "GPSInfo":
+                print(f"GPS Info found: {value}")
+                for t in value.keys():
+                    sub_decoded = GPSTAGS.get(t, t)
+                    gps_info[sub_decoded] = value[t]
+
+        if not gps_info:
+            return None
+
+        lat = None
+        lon = None
+
+        if "GPSLatitude" in gps_info and "GPSLatitudeRef" in gps_info:
+            lat = convert_to_degrees(gps_info["GPSLatitude"])
+            if gps_info["GPSLatitudeRef"] != "N":
+                lat = -lat
+
+        if "GPSLongitude" in gps_info and "GPSLongitudeRef" in gps_info:
+            lon = convert_to_degrees(gps_info["GPSLongitude"])
+            if gps_info["GPSLongitudeRef"] != "E":
+                lon = -lon
+
+        if lat is not None and lon is not None:
+            print(f"Converted coordinates: {lat}, {lon}")
+            return lat, lon  # Return tuple of coordinates
         return None
 
-def get_gps_coordinates(exif_data):
-    """
-    Extract GPS coordinates from EXIF data.
-    """
-    if not exif_data:
-        print("No EXIF data available")
-        return None, None
-        
-    if 'GPSInfo' not in exif_data:
-        print("No GPS info in EXIF data")
-        return None, None
-        
-    gps_info = exif_data['GPSInfo']
-    print(f"GPS Info found: {gps_info}")
-    
-    try:
-        # Handle the specific format found in the images
-        # GPSLatitude is stored in tag 2
-        # GPSLatitudeRef is stored in tag 1
-        # GPSLongitude is stored in tag 4
-        # GPSLongitudeRef is stored in tag 3
-        
-        lat = gps_info.get(2)  # GPSLatitude
-        lat_ref = gps_info.get(1)  # GPSLatitudeRef
-        lon = gps_info.get(4)  # GPSLongitude
-        lon_ref = gps_info.get(3)  # GPSLongitudeRef
-        
-        if lat and lon:
-            # Convert to decimal degrees
-            lat_deg = convert_to_degrees(lat)
-            lon_deg = convert_to_degrees(lon)
-            
-            if lat_deg is not None and lon_deg is not None:
-                # Apply hemisphere reference
-                if lat_ref == 'S':
-                    lat_deg = -lat_deg
-                if lon_ref == 'W':
-                    lon_deg = -lon_deg
-                    
-                print(f"Converted coordinates: {lat_deg}, {lon_deg}")
-                return lat_deg, lon_deg
-                
     except Exception as e:
-        print(f"Error processing GPS coordinates: {str(e)}")
-    
-    return None, None
+        print(f"Error extracting GPS data: {str(e)}")
+        return None
 
 def get_location_from_image(image_path):
     """
@@ -95,7 +73,7 @@ def get_location_from_image(image_path):
     print(f"\nExtracting GPS data from: {image_path}")
     exif_data = get_exif_data(image_path)
     if exif_data:
-        lat, lon = get_gps_coordinates(exif_data)
+        lat, lon = extract_gps_data(image_path)
         if lat is not None and lon is not None:
             return lat, lon
         else:

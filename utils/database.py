@@ -2,55 +2,151 @@ import sqlite3
 import os
 from datetime import datetime
 
-class TreeDatabase:
-    def __init__(self, db_path="tree_analysis.db"):
-        """Initialize database with persistent storage"""
-        self.db_path = db_path
-        self._create_database()
+class Database:
+    def __init__(self):
+        """Initialize database connection"""
+        self.db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_analysis.db')
+        self.conn = None
+        self.cursor = None
+        self.connect()
+        self.create_tables()
 
-    def _create_database(self):
-        """Create the database and tables if they don't exist"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Create table for tree analysis results
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tree_analysis (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                image_path TEXT UNIQUE,
-                image_name TEXT,
-                tree_type TEXT,
-                height_m REAL,
-                width_m REAL,
-                latitude TEXT,
-                longitude TEXT,
-                confidence REAL,
-                processed_date TIMESTAMP,
-                last_accessed TIMESTAMP,
-                hash TEXT
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+    def connect(self):
+        """Establish database connection"""
+        try:
+            self.conn = sqlite3.connect(self.db_path)
+            self.cursor = self.conn.cursor()
+        except sqlite3.Error as e:
+            print(f"Error connecting to database: {e}")
+            raise
 
-<<<<<<< HEAD
+    def create_tables(self):
+        """Create necessary database tables if they don't exist"""
+        try:
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tree_analysis (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    image_path TEXT UNIQUE NOT NULL,
+                    image_name TEXT NOT NULL,
+                    tree_type TEXT NOT NULL,
+                    height_m REAL NOT NULL,
+                    width_m REAL NOT NULL,
+                    latitude REAL,
+                    longitude REAL,
+                    processed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"Error creating tables: {e}")
+            raise
+
+    def save_tree_data(self, image_path, image_name, tree_type, height_m, width_m, latitude=None, longitude=None):
+        """Save tree analysis data to database"""
+        try:
+            # Convert GPS coordinates to float if they exist
+            if latitude is not None:
+                latitude = float(latitude)
+            if longitude is not None:
+                longitude = float(longitude)
+                
+            self.cursor.execute('''
+                INSERT OR REPLACE INTO tree_analysis 
+                (image_path, image_name, tree_type, height_m, width_m, 
+                latitude, longitude, processed_date, last_accessed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (image_path, image_name, tree_type, height_m, width_m, 
+                 latitude, longitude, datetime.now(), datetime.now()))
+            self.conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error saving tree data: {e}")
+            return False
+
+    def get_all_trees(self):
+        """Retrieve all tree analysis records"""
+        try:
+            self.cursor.execute('''
+                SELECT id, image_path, image_name, tree_type, height_m, width_m,
+                       latitude, longitude, processed_date
+                FROM tree_analysis 
+                ORDER BY processed_date DESC
+            ''')
+            return self.cursor.fetchall()
+        except sqlite3.Error as e:
+            print(f"Error retrieving tree data: {e}")
+            return []
+
+    def get_tree_by_id(self, tree_id):
+        """Retrieve a specific tree analysis record by ID"""
+        try:
+            self.cursor.execute('SELECT * FROM tree_analysis WHERE id = ?', (tree_id,))
+            return self.cursor.fetchone()
+        except sqlite3.Error as e:
+            print(f"Error retrieving tree data: {e}")
+            return None
+
+    def update_tree_data(self, tree_id, tree_type=None, height=None, width=None, latitude=None, longitude=None, confidence=None):
+        """Update tree analysis data"""
+        try:
+            updates = []
+            values = []
+            if tree_type is not None:
+                updates.append('tree_type = ?')
+                values.append(tree_type)
+            if height is not None:
+                updates.append('height_m = ?')
+                values.append(height)
+            if width is not None:
+                updates.append('width_m = ?')
+                values.append(width)
+            if latitude is not None:
+                updates.append('latitude = ?')
+                values.append(latitude)
+            if longitude is not None:
+                updates.append('longitude = ?')
+                values.append(longitude)
+            if confidence is not None:
+                updates.append('confidence = ?')
+                values.append(confidence)
+
+            if updates:
+                query = f"UPDATE tree_analysis SET {', '.join(updates)} WHERE id = ?"
+                values.append(tree_id)
+                self.cursor.execute(query, values)
+                self.conn.commit()
+                return True
+            return False
+        except sqlite3.Error as e:
+            print(f"Error updating tree data: {e}")
+            return False
+
+    def clear_database(self):
+        """Clear all records from the database"""
+        try:
+            self.cursor.execute('DELETE FROM tree_analysis')
+            self.conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error clearing database: {e}")
+            return False
+
+    def __del__(self):
+        """Close database connection when object is destroyed"""
+        if self.conn:
+            self.conn.close()
+
     def image_needs_processing(self, image_path, force_refresh=False):
-=======
-    def image_needs_processing(self, image_path):
->>>>>>> 30295fea7552591f2e02c26203007b00277688b0
         """
         Check if an image needs processing by comparing file modification time
         with database entry timestamp
         """
         if not os.path.exists(image_path):
             return True
-<<<<<<< HEAD
             
         if force_refresh:
             return True
-=======
->>>>>>> 30295fea7552591f2e02c26203007b00277688b0
 
         file_mtime = os.path.getmtime(image_path)
         
@@ -153,26 +249,6 @@ class TreeDatabase:
         finally:
             conn.close()
 
-    def clear_database(self):
-        """Clear all data and recreate the database"""
-        try:
-            # Close any existing connections
-            conn = sqlite3.connect(self.db_path)
-            conn.close()
-            
-            # Remove the database file
-            if os.path.exists(self.db_path):
-                os.remove(self.db_path)
-                print(f"Removed existing database: {self.db_path}")
-            
-            # Recreate the database
-            self._create_database()
-            print("Created fresh database")
-            return True
-        except Exception as e:
-            print(f"Error clearing database: {str(e)}")
-            return False
-
     def get_processed_images(self):
         """Get a list of all processed image paths"""
         conn = sqlite3.connect(self.db_path)
@@ -181,5 +257,61 @@ class TreeDatabase:
         try:
             cursor.execute('SELECT image_path FROM tree_analysis')
             return [row[0] for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def update_tree(self, tree_id, tree_type, height_m, width_m, latitude, longitude):
+        """Update tree details in the database"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE tree_analysis 
+                SET tree_type = ?, 
+                    height_m = ?, 
+                    width_m = ?, 
+                    latitude = ?, 
+                    longitude = ?,
+                    last_accessed = ?
+                WHERE id = ?
+            ''', (tree_type, height_m, width_m, latitude, longitude, datetime.now(), tree_id))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error updating tree in database: {str(e)}")
+            return False
+        finally:
+            conn.close()
+
+    def get_tree_by_id(self, tree_id):
+        """Get tree details by ID"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                SELECT id, image_path, image_name, tree_type, height_m, width_m, 
+                       latitude, longitude, processed_date, last_accessed
+                FROM tree_analysis
+                WHERE id = ?
+            ''', (tree_id,))
+            
+            result = cursor.fetchone()
+            if result:
+                return {
+                    'id': result[0],
+                    'image_path': result[1],
+                    'image_name': result[2],
+                    'tree_type': result[3],
+                    'height_m': result[4],
+                    'width_m': result[5],
+                    'latitude': result[6],
+                    'longitude': result[7],
+                    'processed_date': result[8],
+                    'last_accessed': result[9]
+                }
+            return None
         finally:
             conn.close() 
