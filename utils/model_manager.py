@@ -1,3 +1,15 @@
+"""
+Model Management Module for Tree Analysis Application
+
+This module handles the loading and management of the DenseNet model used for tree species identification.
+It provides functionality for loading the model, preprocessing images, and making predictions.
+
+Dependencies:
+    - torch: Deep learning framework
+    - torchvision: Computer vision utilities
+    - PIL: Image processing
+"""
+
 import os
 import torch
 import torchvision.transforms as transforms
@@ -197,3 +209,18 @@ class ModelManager:
             
         self.model_configs[name] = config
         return True 
+
+# Create a singleton instance
+_model_manager = None
+
+def get_model_manager():
+    """
+    Get or create the ModelManager singleton instance.
+    
+    Returns:
+        ModelManager: ModelManager instance
+    """
+    global _model_manager
+    if _model_manager is None:
+        _model_manager = ModelManager()
+    return _model_manager 

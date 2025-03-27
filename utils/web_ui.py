@@ -1,3 +1,16 @@
+"""
+Web Interface Module for Tree Analysis Application
+
+This module provides a Flask-based web interface for the tree analysis application.
+It includes routes for displaying tree data in both table and map formats,
+handling image serving, and exporting data to Excel.
+
+Dependencies:
+    - Flask: Web framework
+    - pandas: Data manipulation and Excel export
+    - openpyxl: Excel file handling
+"""
+
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, send_from_directory
 import os
 from datetime import datetime
@@ -18,13 +31,19 @@ def get_db():
 
 @app.route('/')
 def index():
+    """
+    Render the main dashboard page displaying tree analysis results in a table format.
+    
+    Returns:
+        str: Rendered HTML template with tree data
+    """
     results = get_db().get_all_trees()
     trees = []
     for i, result in enumerate(results, start=1):
         # Extract filename from image_path
         image_name = os.path.basename(result[1])
         tree_data = {
-            'id': i,  # Use the enumerated index starting from 1
+            'id': i,  # Use sequential ID starting from 1
             'image_name': image_name,
             'image_path': result[1],
             'tree_type': result[3],
@@ -39,9 +58,15 @@ def index():
 
 @app.route('/map')
 def map_view():
+    """
+    Render the map view page showing tree locations on an interactive map.
+    
+    Returns:
+        str: Rendered HTML template with tree data for map visualization
+    """
     results = get_db().get_all_trees()
     tree_data = []
-    for i, result in enumerate(results):
+    for i, result in enumerate(results, start=1):
         # Extract filename from image_path
         image_name = os.path.basename(result[1])
         # Add a small offset based on the tree's index
@@ -51,7 +76,7 @@ def map_view():
         lon_offset = offset * (i // 3)  # spread in rows
         
         tree_data.append({
-            'id': result[0],
+            'id': i,
             'image_name': image_name,
             'image_path': result[1],
             'tree_type': result[3],
@@ -66,15 +91,36 @@ def map_view():
 
 @app.route('/images/<filename>')
 def serve_image(filename):
-    """Serve tree images"""
-    try:
-        return send_from_directory(TREE_IMAGES_DIR, filename, as_attachment=False)
-    except Exception as e:
-        print(f"Error serving image {filename}: {str(e)}")
-        return str(e), 404
+    """
+    Serve tree images from the tree_images directory.
+    
+    Args:
+        filename (str): Name of the image file to serve
+        
+    Returns:
+        Response: Image file with appropriate MIME type
+    """
+    return send_file(
+        os.path.join('tree_images', filename),
+        mimetype='image/jpeg'
+    )
 
 @app.route('/export')
 def export_to_excel():
+    """
+    Export tree analysis data to an Excel file.
+    
+    The exported Excel file includes:
+    - Tree ID (sequential)
+    - Image name
+    - Tree type
+    - Height and width measurements
+    - GPS coordinates
+    - Processing date
+    
+    Returns:
+        Response: Excel file with tree analysis data
+    """
     try:
         # Get all trees from database
         results = get_db().get_all_trees()

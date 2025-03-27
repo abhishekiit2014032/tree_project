@@ -1,46 +1,228 @@
+"""
+Database Management Module for Tree Analysis Application
+
+This module handles all database operations for the tree analysis application.
+It provides functionality for storing and retrieving tree data using SQLite.
+
+The database schema includes:
+- Tree ID (primary key)
+- Image path
+- Tree type
+- Height and width measurements
+- GPS coordinates
+- Processing date
+"""
+
 import sqlite3
 import os
 from datetime import datetime
 
 class Database:
+    """Database management class for tree analysis data."""
+    
     def __init__(self):
-        """Initialize database connection"""
-        self.db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_analysis.db')
-        self.conn = None
-        self.cursor = None
-        self.connect()
-        self.create_tables()
+        """Initialize database connection and create tables if they don't exist."""
+        self.db_path = 'tree_analysis.db'
+        self._create_tables()
+    
+    def _create_tables(self):
+        """
+        Create the necessary database tables if they don't exist.
+        
+        Creates a 'trees' table with columns for storing tree analysis data.
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create trees table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_path TEXT NOT NULL,
+                tree_type TEXT NOT NULL,
+                height_m REAL NOT NULL,
+                width_m REAL NOT NULL,
+                latitude REAL,
+                longitude REAL,
+                processed_date TEXT NOT NULL
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    
+    def get_db_connection(self):
+        """
+        Create and return a database connection.
+        
+        Returns:
+            sqlite3.Connection: Database connection object
+        """
+        return sqlite3.connect(self.db_path)
+    
+    def add_tree(self, image_path, tree_type, height_m, width_m, latitude=None, longitude=None):
+        """
+        Add a new tree record to the database.
+        
+        Args:
+            image_path (str): Path to the tree image
+            tree_type (str): Identified tree species
+            height_m (float): Tree height in meters
+            width_m (float): Tree width in meters
+            latitude (float, optional): GPS latitude
+            longitude (float, optional): GPS longitude
+            
+        Returns:
+            int: ID of the newly inserted tree record
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        processed_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        cursor.execute('''
+            INSERT INTO trees (
+                image_path, tree_type, height_m, width_m,
+                latitude, longitude, processed_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (image_path, tree_type, height_m, width_m, latitude, longitude, processed_date))
+        
+        tree_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return tree_id
+    
+    def get_all_trees(self):
+        """
+        Retrieve all tree records from the database.
+        
+        Returns:
+            list: List of tuples containing tree data
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM trees ORDER BY id')
+        trees = cursor.fetchall()
+        
+        conn.close()
+        return trees
+    
+    def get_tree(self, tree_id):
+        """
+        Retrieve a specific tree record by ID.
+        
+        Args:
+            tree_id (int): ID of the tree to retrieve
+            
+        Returns:
+            tuple: Tree data if found, None otherwise
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM trees WHERE id = ?', (tree_id,))
+        tree = cursor.fetchone()
+        
+        conn.close()
+        return tree
+    
+    def update_tree(self, tree_id, tree_type=None, height_m=None, width_m=None, latitude=None, longitude=None):
+        """
+        Update an existing tree record.
+        
+        Args:
+            tree_id (int): ID of the tree to update
+            tree_type (str, optional): New tree species
+            height_m (float, optional): New height in meters
+            width_m (float, optional): New width in meters
+            latitude (float, optional): New GPS latitude
+            longitude (float, optional): New GPS longitude
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        # Build update query dynamically based on provided parameters
+        update_fields = []
+        values = []
+        
+        if tree_type is not None:
+            update_fields.append('tree_type = ?')
+            values.append(tree_type)
+        if height_m is not None:
+            update_fields.append('height_m = ?')
+            values.append(height_m)
+        if width_m is not None:
+            update_fields.append('width_m = ?')
+            values.append(width_m)
+        if latitude is not None:
+            update_fields.append('latitude = ?')
+            values.append(latitude)
+        if longitude is not None:
+            update_fields.append('longitude = ?')
+            values.append(longitude)
+        
+        if not update_fields:
+            conn.close()
+            return False
+        
+        # Add tree_id to values
+        values.append(tree_id)
+        
+        # Execute update query
+        query = f'''
+            UPDATE trees 
+            SET {', '.join(update_fields)}
+            WHERE id = ?
+        '''
+        
+        cursor.execute(query, values)
+        success = cursor.rowcount > 0
+        
+        conn.commit()
+        conn.close()
+        
+        return success
+    
+    def delete_tree(self, tree_id):
+        """
+        Delete a tree record from the database.
+        
+        Args:
+            tree_id (int): ID of the tree to delete
+            
+        Returns:
+            bool: True if deletion was successful, False otherwise
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM trees WHERE id = ?', (tree_id,))
+        success = cursor.rowcount > 0
+        
+        conn.commit()
+        conn.close()
+        
+        return success
 
-    def connect(self):
-        """Establish database connection"""
-        try:
-            self.conn = sqlite3.connect(self.db_path)
-            self.cursor = self.conn.cursor()
-        except sqlite3.Error as e:
-            print(f"Error connecting to database: {e}")
-            raise
+# Create a singleton instance
+_db = None
 
-    def create_tables(self):
-        """Create necessary database tables if they don't exist"""
-        try:
-            self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS tree_analysis (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    image_path TEXT UNIQUE NOT NULL,
-                    image_name TEXT NOT NULL,
-                    tree_type TEXT NOT NULL,
-                    height_m REAL NOT NULL,
-                    width_m REAL NOT NULL,
-                    latitude REAL,
-                    longitude REAL,
-                    processed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            self.conn.commit()
-        except sqlite3.Error as e:
-            print(f"Error creating tables: {e}")
-            raise
+def get_db():
+    """
+    Get or create the database singleton instance.
+    
+    Returns:
+        Database: Database instance
+    """
+    global _db
+    if _db is None:
+        _db = Database()
+    return _db
 
     def save_tree_data(self, image_path, image_name, tree_type, height_m, width_m, latitude=None, longitude=None):
         """Save tree analysis data to database"""
