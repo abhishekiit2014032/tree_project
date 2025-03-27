@@ -34,16 +34,23 @@ class TreeDatabase:
         conn.commit()
         conn.close()
 
+<<<<<<< HEAD
     def image_needs_processing(self, image_path, force_refresh=False):
+=======
+    def image_needs_processing(self, image_path):
+>>>>>>> 30295fea7552591f2e02c26203007b00277688b0
         """
         Check if an image needs processing by comparing file modification time
         with database entry timestamp
         """
         if not os.path.exists(image_path):
             return True
+<<<<<<< HEAD
             
         if force_refresh:
             return True
+=======
+>>>>>>> 30295fea7552591f2e02c26203007b00277688b0
 
         file_mtime = os.path.getmtime(image_path)
         
