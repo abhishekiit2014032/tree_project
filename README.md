@@ -1,36 +1,22 @@
 # Tree Analysis Project
 
-A Python-based application that analyzes tree images to extract information about tree types, dimensions, and locations. The project uses computer vision techniques and machine learning to identify trees and calculate their dimensions, with a modern web interface for viewing and managing the analysis results.
+This project analyzes tree images to identify tree species, calculate dimensions, and extract GPS coordinates. It provides both a command-line interface and a web-based dashboard for viewing and managing the analysis results.
 
 ## Features
 
-- **Tree Type Identification**
-  - Uses Plant.id API for accurate tree species identification
-  - Provides confidence scores for identifications
-  - Supports multiple tree species
-
-- **Dimension Analysis**
-  - Calculates tree height and width using computer vision
-  - Uses reference object for accurate scaling
-  - Supports measurements in meters
-
-- **Location Tracking**
-  - Extracts GPS coordinates from image EXIF metadata
-  - Displays location data in a user-friendly format
-  - Handles cases where GPS data is not available
-
-- **Modern Web Interface**
-  - Clean, responsive design using Bootstrap
-  - Real-time data updates
-  - Image preview functionality
-  - Edit capabilities for all tree data
-  - Sortable and filterable results table
-
-- **Data Management**
-  - SQLite database for persistent storage
-  - Excel export functionality
-  - Automatic image processing
-  - Caching system to avoid reprocessing
+- Tree species identification using DenseNet model
+- Tree dimension calculation using reference-based method
+- GPS coordinate extraction from images
+- Web-based dashboard with:
+  - Table view of all analyzed trees
+  - Interactive map view showing tree locations
+  - Tree clustering for better visualization of multiple trees
+  - Detailed tree information including:
+    - Tree type
+    - Height and width
+    - GPS coordinates
+    - Processed date
+    - Image reference
 
 ## Installation
 
@@ -40,17 +26,76 @@ git clone https://github.com/abhishekiit2014032/tree_project.git
 cd tree_project
 ```
 
-2. Install dependencies:
+2. Install required packages:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Set up environment variables:
-   - Create a `.env` file in the project root
-   - Add your Plant.id API key:
+3. Download the model:
+```bash
+python download_model.py
 ```
-PLANT_ID_API_KEY=your_api_key_here
+
+## Usage
+
+1. Place your tree images in the `tree_images` directory
+
+2. Run the analysis:
+```bash
+python driver_script.py
 ```
+
+3. Access the web dashboard:
+- Open your browser and navigate to `http://localhost:5000`
+- View the table of analyzed trees
+- Click "Map View" to see trees plotted on an interactive map
+- Click on tree markers to view detailed information
+- Use the export button to download analysis results
+
+## Project Structure
+
+```
+tree_project/
+├── driver_script.py      # Main script to run the analysis
+├── download_model.py     # Script to download the DenseNet model
+├── requirements.txt      # Python package dependencies
+├── tree_images/         # Directory for input images
+├── models/              # Directory for model files
+│   ├── UrbanTreeDenseNet.pt
+│   └── urban_tree_labels.txt
+└── utils/               # Utility modules
+    ├── database.py      # Database operations
+    ├── image_processing.py  # Image processing functions
+    ├── model_manager.py     # Model management
+    ├── plant_id.py          # Tree identification
+    ├── web_ui.py            # Web interface
+    └── templates/           # HTML templates
+        ├── index.html       # Main dashboard
+        ├── map.html         # Map view
+        └── edit.html        # Edit tree details
+```
+
+## Recent Updates
+
+- Improved web interface with a clean, modern design
+- Added interactive map view with tree clustering
+- Enhanced tree data visualization
+- Fixed tree ID sequencing in the table view
+- Optimized map performance for large datasets
+- Added support for viewing tree images directly from the interface
+
+## Requirements
+
+- Python 3.7+
+- PyTorch
+- Flask
+- OpenCV
+- NumPy
+- Other dependencies listed in requirements.txt
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Directory Structure
 
