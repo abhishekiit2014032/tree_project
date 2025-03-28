@@ -50,7 +50,7 @@ class Database:
         
         conn.commit()
         conn.close()
-    
+
     def get_db_connection(self):
         """
         Create and return a database connection.
@@ -208,6 +208,25 @@ class Database:
         conn.close()
         
         return success
+
+    def get_tree_by_image_path(self, image_path):
+        """
+        Retrieve a tree record by image path.
+        
+        Args:
+            image_path (str): Path to the tree image
+            
+        Returns:
+            tuple: Tree data if found, None otherwise
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM trees WHERE image_path = ?', (image_path,))
+        tree = cursor.fetchone()
+        
+        conn.close()
+        return tree
 
 # Create a singleton instance
 _db = None

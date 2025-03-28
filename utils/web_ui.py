@@ -11,13 +11,13 @@ Dependencies:
     - openpyxl: Excel file handling
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, send_file, redirect, url_for, send_from_directory
 import os
 from datetime import datetime
 import pandas as pd
 from io import BytesIO
 from .database import Database
-from .image_processing import calculate_tree_dimensions
+import logging
 
 # Get the absolute path to the tree_images directory
 TREE_IMAGES_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_images'))
@@ -46,12 +46,12 @@ def index():
             'id': i,  # Use sequential ID starting from 1
             'image_name': image_name,
             'image_path': result[1],
-            'tree_type': result[3],
-            'height_m': result[4],
-            'width_m': result[5],
-            'latitude': result[6],
-            'longitude': result[7],
-            'processed_date': result[8]
+            'tree_type': result[2],
+            'height_m': result[3],
+            'width_m': result[4],
+            'latitude': result[5],
+            'longitude': result[6],
+            'processed_date': result[7]  # Changed from 8 to 7
         }
         trees.append(tree_data)
     return render_template('index.html', trees=trees)
@@ -75,16 +75,20 @@ def map_view():
         lat_offset = offset * (i % 3)  # spread in 3 columns
         lon_offset = offset * (i // 3)  # spread in rows
         
+        # Convert string coordinates to float if they exist
+        latitude = float(result[5]) + lat_offset if result[5] else None
+        longitude = float(result[6]) + lon_offset if result[6] else None
+        
         tree_data.append({
             'id': i,
             'image_name': image_name,
             'image_path': result[1],
-            'tree_type': result[3],
-            'height_m': result[4],
-            'width_m': result[5],
-            'latitude': result[6] + lat_offset,
-            'longitude': result[7] + lon_offset,
-            'processed_date': result[8]
+            'tree_type': result[2],
+            'height_m': result[3],
+            'width_m': result[4],
+            'latitude': latitude,
+            'longitude': longitude,
+            'processed_date': result[7]  # This is the processed_date field
         })
 
     return render_template('map.html', trees=tree_data)
@@ -100,10 +104,11 @@ def serve_image(filename):
     Returns:
         Response: Image file with appropriate MIME type
     """
-    return send_file(
-        os.path.join('tree_images', filename),
-        mimetype='image/jpeg'
-    )
+    try:
+        return send_from_directory(TREE_IMAGES_DIR, filename, mimetype='image/jpeg')
+    except Exception as e:
+        logging.error(f"Error serving image {filename}: {str(e)}")
+        return str(e), 404
 
 @app.route('/export')
 def export_to_excel():
@@ -133,12 +138,12 @@ def export_to_excel():
             data.append({
                 'ID': i,  # Use sequential ID starting from 1
                 'Image Name': image_name,
-                'Tree Type': result[3],
-                'Height (m)': f"{result[4]:.2f}",  # Format to 2 decimal places
-                'Width (m)': f"{result[5]:.2f}",   # Format to 2 decimal places
-                'Latitude': f"{result[6]:.6f}" if result[6] else "",
-                'Longitude': f"{result[7]:.6f}" if result[7] else "",
-                'Processed Date': result[8]
+                'Tree Type': result[2],
+                'Height (m)': f"{result[3]:.2f}",  # Format to 2 decimal places
+                'Width (m)': f"{result[4]:.2f}",   # Format to 2 decimal places
+                'Latitude': f"{result[5]:.6f}" if result[5] else "",
+                'Longitude': f"{result[6]:.6f}" if result[6] else "",
+                'Processed Date': result[7]
             })
         
         df = pd.DataFrame(data)
@@ -170,17 +175,8 @@ def export_to_excel():
             download_name=filename
         )
     except Exception as e:
-        print(f"Error exporting to Excel: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    """Serve static files (images)"""
-    try:
-        return send_from_directory(TREE_IMAGES_DIR, filename, as_attachment=False)
-    except Exception as e:
-        print(f"Error serving image {filename}: {str(e)}")
-        return str(e), 404
+        logging.error(f"Error exporting to Excel: {str(e)}")
+        return str(e), 500
 
 @app.route('/edit_tree/<int:tree_id>', methods=['GET', 'POST'])
 def edit_tree(tree_id):
@@ -199,16 +195,16 @@ def edit_tree(tree_id):
             success = db.update_tree(tree_id, tree_type, height_m, width_m, latitude, longitude)
             
             if success:
-                return jsonify({'status': 'success'})
+                return {'status': 'success'}
             else:
-                return jsonify({'status': 'error', 'message': 'Failed to update tree'})
+                return {'status': 'error', 'message': 'Failed to update tree'}, 500
         
         # GET request - show edit form
         tree = db.get_tree_by_id(tree_id)
         if tree:
             return render_template('edit.html', tree=tree)
         else:
-            return jsonify({'error': 'Tree not found'}), 404
+            return {'error': 'Tree not found'}, 404
     finally:
         del db  # Ensure database connection is closed
 
