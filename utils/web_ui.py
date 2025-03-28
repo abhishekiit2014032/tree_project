@@ -58,40 +58,53 @@ def index():
 
 @app.route('/map')
 def map_view():
-    """
-    Render the map view page showing tree locations on an interactive map.
-    
-    Returns:
-        str: Rendered HTML template with tree data for map visualization
-    """
-    results = get_db().get_all_trees()
-    tree_data = []
-    for i, result in enumerate(results, start=1):
-        # Extract filename from image_path
-        image_name = os.path.basename(result[1])
-        # Add a small offset based on the tree's index
-        # This will spread the trees in a small area around the actual GPS coordinates
-        offset = 0.0001  # approximately 10 meters
-        lat_offset = offset * (i % 3)  # spread in 3 columns
-        lon_offset = offset * (i // 3)  # spread in rows
+    """Render the map view page with individual tree markers."""
+    try:
+        conn = get_db().get_db_connection()
+        cursor = conn.cursor()
         
-        # Convert string coordinates to float if they exist
-        latitude = float(result[5]) + lat_offset if result[5] else None
-        longitude = float(result[6]) + lon_offset if result[6] else None
+        # Get all trees with their coordinates
+        cursor.execute('''
+            SELECT id, tree_type, height_m, width_m, latitude, longitude, image_path, processed_date 
+            FROM trees 
+            WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+            ORDER BY processed_date DESC
+        ''')
+        trees = cursor.fetchall()
         
-        tree_data.append({
-            'id': i,
-            'image_name': image_name,
-            'image_path': result[1],
-            'tree_type': result[2],
-            'height_m': result[3],
-            'width_m': result[4],
-            'latitude': latitude,
-            'longitude': longitude,
-            'processed_date': result[7]  # This is the processed_date field
-        })
-
-    return render_template('map.html', trees=tree_data)
+        # Create markers for each tree
+        markers = []
+        for tree in trees:
+            tree_id, tree_type, height, width, lat, lon, image_path, processed_date = tree
+            marker = {
+                'id': tree_id,
+                'type': tree_type,
+                'height': height,
+                'width': width,
+                'lat': lat,
+                'lon': lon,
+                'image': image_path,
+                'date': processed_date,
+                'popup': f'''
+                    <div class="tree-popup">
+                        <h3>Tree #{tree_id}</h3>
+                        <p><strong>Species:</strong> {tree_type}</p>
+                        <p><strong>Height:</strong> {height:.2f}m</p>
+                        <p><strong>Width:</strong> {width:.2f}m</p>
+                        <p><strong>Date:</strong> {processed_date}</p>
+                        <img src="/images/{os.path.basename(image_path)}" alt="Tree Image" style="max-width: 200px;">
+                    </div>
+                '''
+            }
+            markers.append(marker)
+        
+        return render_template('map.html', markers=markers)
+    except Exception as e:
+        app.logger.error(f"Error in map view: {str(e)}")
+        return render_template('error.html', error=str(e))
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 @app.route('/images/<filename>')
 def serve_image(filename):
