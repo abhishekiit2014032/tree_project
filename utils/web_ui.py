@@ -11,7 +11,7 @@ Dependencies:
     - openpyxl: Excel file handling
 """
 
-from flask import Flask, render_template, request, send_file, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, send_file, redirect, url_for, send_from_directory, jsonify
 import os
 from datetime import datetime
 import pandas as pd
@@ -20,124 +20,84 @@ from .database import Database
 import logging
 import math
 
-# Get the absolute path to the tree_images directory
-TREE_IMAGES_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_images'))
+# Set up image directory path
+TREE_IMAGES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tree_images'))
 
-# Initialize Flask app with the correct static folder
-app = Flask(__name__, static_folder=TREE_IMAGES_DIR, static_url_path='/images')
+# Initialize Flask app
+app = Flask(__name__, 
+           template_folder=os.path.join(os.path.dirname(__file__), '..', 'templates'),
+           static_folder=TREE_IMAGES_DIR,
+           static_url_path='/images')
 
-def get_db():
-    """Create a new database connection for each request"""
-    return Database()
+# Initialize database
+db = Database()
 
 @app.route('/')
 def index():
-    """
-    Render the main dashboard page displaying tree analysis results in a table format.
-    
-    Returns:
-        str: Rendered HTML template with tree data
-    """
-    results = get_db().get_all_trees()
-    trees = []
-    for i, result in enumerate(results, start=1):
-        # The image_path in result[1] is now just the filename
-        image_name = result[1]
-        tree_data = {
-            'id': i,
-            'image_name': image_name,
-            'image_path': f'/images/{image_name}',  # Use the correct URL path
-            'tree_type': result[2],
-            'height_m': result[3],
-            'width_m': result[4],
-            'latitude': result[5],
-            'longitude': result[6],
-            'processed_date': result[7]
-        }
-        trees.append(tree_data)
-    return render_template('index.html', trees=trees)
+    """Render the main page with tree data table."""
+    try:
+        trees = db.get_all_trees()
+        tree_data = []
+        
+        for tree in trees:
+            tree_info = {
+                'id': tree[0],
+                'image_path': tree[1],
+                'tree_type': tree[2],
+                'type_confidence': tree[3],
+                'height_m': tree[4],
+                'width_m': tree[5],
+                'measurement_method': tree[6],
+                'measurement_confidence': tree[7],
+                'latitude': tree[8],
+                'longitude': tree[9],
+                'altitude': tree[10],
+                'timestamp': tree[11]
+            }
+            tree_data.append(tree_info)
+            
+        return render_template('index.html', trees=tree_data)
+    except Exception as e:
+        logging.error(f"Error rendering index page: {str(e)}")
+        return render_template('error.html', error=str(e))
 
 @app.route('/map')
 def map_view():
-    """
-    Render the map view page showing tree locations on an interactive map.
-    Each tree is plotted individually with a small offset to prevent overlapping.
-    
-    Returns:
-        str: Rendered HTML template with tree data for map visualization
-    """
-    results = get_db().get_all_trees()
-    tree_data = []
-    
-    # Process each tree individually
-    for i, result in enumerate(results, start=1):
-        # The image_path in result[1] is now just the filename
-        image_name = result[1]
+    """Render the map view with tree locations."""
+    try:
+        trees = db.get_all_trees()
+        tree_data = []
         
-        # Add a small offset to each tree's location to prevent overlapping
-        if result[5] and result[6]:
-            base_lat = float(result[5])
-            base_lon = float(result[6])
+        for tree in trees:
+            tree_info = {
+                'id': tree[0],
+                'image_path': tree[1],
+                'tree_type': tree[2],
+                'type_confidence': tree[3],
+                'height_m': tree[4],
+                'width_m': tree[5],
+                'measurement_method': tree[6],
+                'measurement_confidence': tree[7],
+                'latitude': tree[8],
+                'longitude': tree[9],
+                'altitude': tree[10],
+                'timestamp': tree[11]
+            }
+            tree_data.append(tree_info)
             
-            # Add a small offset based on the tree's index
-            offset = 0.0001  # approximately 10 meters
-            lat_offset = offset * (i % 3)  # spread in 3 columns
-            lon_offset = offset * (i // 3)  # spread in rows
-            
-            tree_data.append({
-                'id': i,
-                'image_name': image_name,
-                'image_path': f'/images/{image_name}',  # Use the correct URL path
-                'tree_type': result[2],
-                'height_m': result[3],
-                'width_m': result[4],
-                'latitude': base_lat + lat_offset,
-                'longitude': base_lon + lon_offset,
-                'processed_date': result[7]
-            })
-        else:
-            # For trees without GPS coordinates
-            tree_data.append({
-                'id': i,
-                'image_name': image_name,
-                'image_path': f'/images/{image_name}',  # Use the correct URL path
-                'tree_type': result[2],
-                'height_m': result[3],
-                'width_m': result[4],
-                'latitude': None,
-                'longitude': None,
-                'processed_date': result[7]
-            })
-    
-    return render_template('map.html', trees=tree_data)
+        return render_template('map.html', trees=tree_data)
+    except Exception as e:
+        logging.error(f"Error rendering map view: {str(e)}")
+        return render_template('error.html', error=str(e))
 
 @app.route('/images/<path:filename>')
 def serve_image(filename):
-    """
-    Serve tree images from the tree_images directory.
-    
-    Args:
-        filename (str): Name of the image file to serve
-        
-    Returns:
-        Response: Image file response or 404 if not found
-    """
+    """Serve tree images."""
     try:
-        # Construct the full path to the image
-        image_path = os.path.join(TREE_IMAGES_DIR, filename)
-        
-        # Check if file exists
-        if not os.path.exists(image_path):
-            logging.error(f"Image not found: {image_path}")
-            return send_from_directory(TREE_IMAGES_DIR, 'placeholder.jpg'), 404
-            
-        # Log successful image serving
-        logging.info(f"Serving image: {filename} from {image_path}")
         return send_from_directory(TREE_IMAGES_DIR, filename)
-        
     except Exception as e:
         logging.error(f"Error serving image {filename}: {str(e)}")
-        return send_from_directory(TREE_IMAGES_DIR, 'placeholder.jpg'), 404
+        return '', 404
 
 @app.route('/export')
 def export_to_excel():
@@ -157,7 +117,7 @@ def export_to_excel():
     """
     try:
         # Get all trees from database
-        results = get_db().get_all_trees()
+        results = db.get_all_trees()
         
         # Create a DataFrame
         data = []
@@ -168,11 +128,11 @@ def export_to_excel():
                 'ID': i,  # Use sequential ID starting from 1
                 'Image Name': image_name,
                 'Tree Type': result[2],
-                'Height (m)': f"{result[3]:.2f}",  # Format to 2 decimal places
-                'Width (m)': f"{result[4]:.2f}",   # Format to 2 decimal places
-                'Latitude': f"{result[5]:.6f}" if result[5] else "",
-                'Longitude': f"{result[6]:.6f}" if result[6] else "",
-                'Processed Date': result[7]
+                'Height (m)': f"{result[4]:.2f}",  # Format to 2 decimal places
+                'Width (m)': f"{result[5]:.2f}",   # Format to 2 decimal places
+                'Latitude': f"{result[8]:.6f}" if result[8] else "",
+                'Longitude': f"{result[9]:.6f}" if result[9] else "",
+                'Processed Date': result[11]
             })
         
         df = pd.DataFrame(data)
@@ -210,7 +170,6 @@ def export_to_excel():
 @app.route('/edit_tree/<int:tree_id>', methods=['GET', 'POST'])
 def edit_tree(tree_id):
     """Handle tree editing"""
-    db = get_db()
     try:
         if request.method == 'POST':
             # Get form data
@@ -234,9 +193,43 @@ def edit_tree(tree_id):
             return render_template('edit.html', tree=tree)
         else:
             return {'error': 'Tree not found'}, 404
-    finally:
-        del db  # Ensure database connection is closed
+    except Exception as e:
+        logging.error(f"Error editing tree: {str(e)}")
+        return {'error': str(e)}, 500
+
+@app.route('/api/trees')
+def get_trees():
+    """API endpoint to get tree data in JSON format."""
+    try:
+        trees = db.get_all_trees()
+        tree_data = []
+        
+        for tree in trees:
+            tree_info = {
+                'id': tree[0],
+                'image_path': tree[1],
+                'tree_type': tree[2],
+                'type_confidence': tree[3],
+                'height_m': tree[4],
+                'width_m': tree[5],
+                'measurement_method': tree[6],
+                'measurement_confidence': tree[7],
+                'latitude': tree[8],
+                'longitude': tree[9],
+                'altitude': tree[10],
+                'timestamp': tree[11]
+            }
+            tree_data.append(tree_info)
+            
+        return jsonify(tree_data)
+    except Exception as e:
+        logging.error(f"Error getting tree data: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 def start_web_interface():
-    """Start the Flask web interface"""
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    """Start the Flask web interface."""
+    try:
+        app.run(host='0.0.0.0', port=5000)
+    except Exception as e:
+        logging.error(f"Error starting web interface: {str(e)}")
+        raise 

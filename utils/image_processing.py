@@ -4,10 +4,10 @@ import torch
 import torchvision.transforms as transforms
 from PIL import Image
 import logging
-from .tree_dimension_calculator import TreeDimensionCalculator
+from .advanced_tree_measurer import AdvancedTreeMeasurer
 
-# Initialize the tree dimension calculator
-tree_calculator = TreeDimensionCalculator()
+# Initialize the advanced tree measurer
+tree_measurer = AdvancedTreeMeasurer()
 
 def preprocess_image(image_path):
     """
@@ -39,22 +39,6 @@ def preprocess_image(image_path):
         logging.error(f"Error preprocessing image {image_path}: {str(e)}")
         return None
 
-def calculate_tree_dimensions(image_path):
-    """
-    Calculate tree dimensions using the improved calculator.
-    
-    Args:
-        image_path (str): Path to the image file
-        
-    Returns:
-        tuple: (height_m, width_m) or (None, None) if calculation fails
-    """
-    try:
-        return tree_calculator.calculate_tree_dimensions(image_path)
-    except Exception as e:
-        logging.error(f"Error calculating tree dimensions for {image_path}: {str(e)}")
-        return None, None
-
 def process_image(image_path, model, device):
     """
     Process a single image to identify tree type and calculate dimensions.
@@ -68,7 +52,7 @@ def process_image(image_path, model, device):
         dict: Dictionary containing tree type and dimensions, or None if processing fails
     """
     try:
-        # Preprocess image
+        # Preprocess image for tree type identification
         image_tensor = preprocess_image(image_path)
         if image_tensor is None:
             return None
@@ -76,7 +60,7 @@ def process_image(image_path, model, device):
         # Move tensor to device
         image_tensor = image_tensor.to(device)
         
-        # Get model prediction
+        # Get model prediction for tree type
         with torch.no_grad():
             outputs = model(image_tensor)
             _, predicted = torch.max(outputs, 1)
@@ -85,18 +69,27 @@ def process_image(image_path, model, device):
         # Get tree type from model's class mapping
         tree_type = model.class_names[predicted.item()]
         
-        # Calculate tree dimensions
-        height_m, width_m = calculate_tree_dimensions(image_path)
-        if height_m is None or width_m is None:
+        # Calculate tree dimensions using advanced measurer
+        dimensions = tree_measurer.calculate_dimensions(image_path)
+        if dimensions is None:
             logging.warning(f"Failed to calculate dimensions for {image_path}")
             return None
             
-        return {
+        # Combine results
+        result = {
             'tree_type': tree_type,
             'confidence': confidence,
-            'height_m': height_m,
-            'width_m': width_m
+            'height_m': dimensions['height_m'],
+            'width_m': dimensions['width_m'],
+            'measurement_method': dimensions['method'],
+            'measurement_confidence': dimensions['confidence']
         }
+        
+        # Add GPS data if available
+        if 'gps' in dimensions:
+            result['gps'] = dimensions['gps']
+        
+        return result
         
     except Exception as e:
         logging.error(f"Error processing image {image_path}: {str(e)}")

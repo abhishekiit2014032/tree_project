@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tree Analysis Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <style>
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+        .tree-info {
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .tree-image {
+            max-width: 200px;
+            margin-top: 10px;
+        }
+        .confidence-high {
+            color: green;
+        }
+        .confidence-medium {
+            color: orange;
+        }
+        .confidence-low {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // Initialize map
+        var map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Add tree markers
+        var trees = {{ trees|tojson|safe }};
+        var bounds = [];
+        
+        trees.forEach(function(tree) {
+            if (tree.latitude && tree.longitude) {
+                var marker = L.marker([tree.latitude, tree.longitude]);
+                
+                // Format confidence classes
+                var typeConfidenceClass = getConfidenceClass(tree.type_confidence);
+                var measureConfidenceClass = getConfidenceClass(tree.measurement_confidence);
+                
+                // Create popup content
+                var content = '<div class="tree-info">' +
+                    '<h3>Tree Details</h3>' +
+                    '<p><strong>Type:</strong> ' + tree.tree_type + '</p>' +
+                    '<p><strong>Type Confidence:</strong> <span class="' + typeConfidenceClass + '">' + 
+                    formatConfidence(tree.type_confidence) + '</span></p>' +
+                    '<p><strong>Height:</strong> ' + tree.height_m.toFixed(2) + ' m</p>' +
+                    '<p><strong>Width:</strong> ' + tree.width_m.toFixed(2) + ' m</p>' +
+                    '<p><strong>Measurement Method:</strong> ' + tree.measurement_method + '</p>' +
+                    '<p><strong>Measurement Confidence:</strong> <span class="' + measureConfidenceClass + '">' + 
+                    formatConfidence(tree.measurement_confidence) + '</span></p>';
+                
+                // Add GPS coordinates if available
+                if (tree.altitude) {
+                    content += '<p><strong>Altitude:</strong> ' + tree.altitude.toFixed(1) + ' m</p>';
+                }
+                
+                // Add image if available
+                if (tree.image_path) {
+                    content += '<img src="/images/' + tree.image_path + '" class="tree-image" />';
+                }
+                
+                content += '</div>';
+                
+                marker.bindPopup(content);
+                marker.addTo(map);
+                bounds.push([tree.latitude, tree.longitude]);
+            }
+        });
+        
+        // Fit map to tree markers
+        if (bounds.length > 0) {
+            map.fitBounds(bounds);
+        }
+        
+        function getConfidenceClass(confidence) {
+            if (confidence >= 0.8) return 'confidence-high';
+            if (confidence >= 0.5) return 'confidence-medium';
+            return 'confidence-low';
+        }
+        
+        function formatConfidence(confidence) {
+            return (confidence * 100).toFixed(1) + '%';
+        }
+    </script>
+</body>
+</html> 
