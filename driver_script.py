@@ -43,6 +43,19 @@ def cleanup_analyzed_images():
         except Exception as e:
             logging.error(f"Error removing {temp_file}: {str(e)}")
 
+def clean_database():
+    """Clean the database by removing all records"""
+    try:
+        if os.path.exists('tree_analysis.db'):
+            os.remove('tree_analysis.db')
+            logging.info("Database cleaned successfully")
+        else:
+            logging.info("Database file does not exist")
+    except Exception as e:
+        logging.error(f"Error cleaning database: {str(e)}")
+        return False
+    return True
+
 def process_image(image_path, db, force_refresh=False):
     """Process a single image and save results to database"""
     try:
@@ -135,11 +148,19 @@ def main():
     parser = argparse.ArgumentParser(description='Tree Analysis Application')
     parser.add_argument('--force-refresh', action='store_true', 
                       help='Force refresh of all images, even if previously processed')
+    parser.add_argument('--clean-db', action='store_true',
+                      help='Clean the database before processing')
     args = parser.parse_args()
     
     try:
         # Load environment variables
         load_dotenv()
+        
+        # Clean database if requested
+        if args.clean_db:
+            if not clean_database():
+                logging.error("Failed to clean database. Exiting...")
+                return
         
         # Initialize database
         db = Database()
