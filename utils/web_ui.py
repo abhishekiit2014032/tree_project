@@ -18,6 +18,7 @@ import pandas as pd
 from io import BytesIO
 from .database import Database
 import logging
+import math
 
 # Get the absolute path to the tree_images directory
 TREE_IMAGES_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_images'))
@@ -40,74 +41,77 @@ def index():
     results = get_db().get_all_trees()
     trees = []
     for i, result in enumerate(results, start=1):
-        # Extract filename from image_path
-        image_name = os.path.basename(result[1])
+        # The image_path in result[1] is now just the filename
+        image_name = result[1]
         tree_data = {
-            'id': i,  # Use sequential ID starting from 1
+            'id': i,
             'image_name': image_name,
-            'image_path': result[1],
+            'image_path': f'/images/{image_name}',  # Use the correct URL path
             'tree_type': result[2],
             'height_m': result[3],
             'width_m': result[4],
             'latitude': result[5],
             'longitude': result[6],
-            'processed_date': result[7]  # Changed from 8 to 7
+            'processed_date': result[7]
         }
         trees.append(tree_data)
     return render_template('index.html', trees=trees)
 
 @app.route('/map')
 def map_view():
-    """Render the map view page with individual tree markers."""
-    try:
-        conn = get_db().get_db_connection()
-        cursor = conn.cursor()
+    """
+    Render the map view page showing tree locations on an interactive map.
+    Each tree is plotted individually with a small offset to prevent overlapping.
+    
+    Returns:
+        str: Rendered HTML template with tree data for map visualization
+    """
+    results = get_db().get_all_trees()
+    tree_data = []
+    
+    # Process each tree individually
+    for i, result in enumerate(results, start=1):
+        # The image_path in result[1] is now just the filename
+        image_name = result[1]
         
-        # Get all trees with their coordinates
-        cursor.execute('''
-            SELECT id, tree_type, height_m, width_m, latitude, longitude, image_path, processed_date 
-            FROM trees 
-            WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-            ORDER BY processed_date DESC
-        ''')
-        trees = cursor.fetchall()
-        
-        # Create markers for each tree
-        markers = []
-        for tree in trees:
-            tree_id, tree_type, height, width, lat, lon, image_path, processed_date = tree
-            # Ensure all values are JSON serializable
-            marker = {
-                'id': int(tree_id),
-                'type': str(tree_type),
-                'height': float(height) if height is not None else 0.0,
-                'width': float(width) if width is not None else 0.0,
-                'lat': float(lat) if lat is not None else 0.0,
-                'lon': float(lon) if lon is not None else 0.0,
-                'image': str(image_path),
-                'date': str(processed_date) if processed_date else '',
-                'popup': f'''
-                    <div class="tree-popup">
-                        <h3>Tree #{tree_id}</h3>
-                        <p><strong>Species:</strong> {tree_type}</p>
-                        <p><strong>Height:</strong> {height:.2f}m</p>
-                        <p><strong>Width:</strong> {width:.2f}m</p>
-                        <p><strong>Date:</strong> {processed_date}</p>
-                        <img src="/images/{os.path.basename(image_path)}" alt="Tree Image" style="max-width: 200px;">
-                    </div>
-                '''
-            }
-            markers.append(marker)
-        
-        return render_template('map.html', markers=markers)
-    except Exception as e:
-        app.logger.error(f"Error in map view: {str(e)}")
-        return render_template('error.html', error=f"An error occurred while loading the map: {str(e)}")
-    finally:
-        if 'conn' in locals():
-            conn.close()
+        # Add a small offset to each tree's location to prevent overlapping
+        if result[5] and result[6]:
+            base_lat = float(result[5])
+            base_lon = float(result[6])
+            
+            # Add a small offset based on the tree's index
+            offset = 0.0001  # approximately 10 meters
+            lat_offset = offset * (i % 3)  # spread in 3 columns
+            lon_offset = offset * (i // 3)  # spread in rows
+            
+            tree_data.append({
+                'id': i,
+                'image_name': image_name,
+                'image_path': f'/images/{image_name}',  # Use the correct URL path
+                'tree_type': result[2],
+                'height_m': result[3],
+                'width_m': result[4],
+                'latitude': base_lat + lat_offset,
+                'longitude': base_lon + lon_offset,
+                'processed_date': result[7]
+            })
+        else:
+            # For trees without GPS coordinates
+            tree_data.append({
+                'id': i,
+                'image_name': image_name,
+                'image_path': f'/images/{image_name}',  # Use the correct URL path
+                'tree_type': result[2],
+                'height_m': result[3],
+                'width_m': result[4],
+                'latitude': None,
+                'longitude': None,
+                'processed_date': result[7]
+            })
+    
+    return render_template('map.html', trees=tree_data)
 
-@app.route('/images/<filename>')
+@app.route('/images/<path:filename>')
 def serve_image(filename):
     """
     Serve tree images from the tree_images directory.
@@ -116,13 +120,24 @@ def serve_image(filename):
         filename (str): Name of the image file to serve
         
     Returns:
-        Response: Image file with appropriate MIME type
+        Response: Image file response or 404 if not found
     """
     try:
-        return send_from_directory(TREE_IMAGES_DIR, filename, mimetype='image/jpeg')
+        # Construct the full path to the image
+        image_path = os.path.join(TREE_IMAGES_DIR, filename)
+        
+        # Check if file exists
+        if not os.path.exists(image_path):
+            logging.error(f"Image not found: {image_path}")
+            return send_from_directory(TREE_IMAGES_DIR, 'placeholder.jpg'), 404
+            
+        # Log successful image serving
+        logging.info(f"Serving image: {filename} from {image_path}")
+        return send_from_directory(TREE_IMAGES_DIR, filename)
+        
     except Exception as e:
         logging.error(f"Error serving image {filename}: {str(e)}")
-        return str(e), 404
+        return send_from_directory(TREE_IMAGES_DIR, 'placeholder.jpg'), 404
 
 @app.route('/export')
 def export_to_excel():

@@ -16,6 +16,7 @@ The database schema includes:
 import sqlite3
 import os
 from datetime import datetime
+import logging
 
 class Database:
     """Database management class for tree analysis data."""
@@ -65,7 +66,7 @@ class Database:
         Add a new tree record to the database.
         
         Args:
-            image_path (str): Path to the tree image
+            image_path (str): Path to the tree image (relative to tree_images directory)
             tree_type (str): Identified tree species
             height_m (float): Tree height in meters
             width_m (float): Tree width in meters
@@ -73,25 +74,30 @@ class Database:
             longitude (float, optional): GPS longitude
             
         Returns:
-            int: ID of the newly inserted tree record
+            bool: True if successful, False otherwise
         """
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        
-        processed_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        cursor.execute('''
-            INSERT INTO trees (
-                image_path, tree_type, height_m, width_m,
-                latitude, longitude, processed_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (image_path, tree_type, height_m, width_m, latitude, longitude, processed_date))
-        
-        tree_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
-        return tree_id
+        try:
+            # Store only the filename in the database
+            image_filename = os.path.basename(image_path)
+            logging.info(f"Storing image filename: {image_filename}")
+            
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO trees (image_path, tree_type, height_m, width_m, latitude, longitude, processed_date)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+            ''', (image_filename, tree_type, height_m, width_m, latitude, longitude))
+            
+            conn.commit()
+            return True
+            
+        except Exception as e:
+            logging.error(f"Error adding tree to database: {str(e)}")
+            return False
+        finally:
+            if 'conn' in locals():
+                conn.close()
     
     def get_all_trees(self):
         """
