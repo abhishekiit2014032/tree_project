@@ -5,13 +5,16 @@ from datetime import datetime
 import shutil
 from utils.database import Database
 from utils.geolocation import extract_gps_data
-from utils.image_processing import calculate_tree_dimensions
+from utils.image_processing import calculate_tree_dimensions, process_image
 from utils.plant_id import identify_tree_type, resize_image
 from utils.web_ui import start_web_interface
 from dotenv import load_dotenv
 import threading
 import logging
 import argparse
+import torch
+from utils.model_loader import load_model
+from utils.download_cascades import main as download_cascades
 
 # Set up logging
 logging.basicConfig(
@@ -56,157 +59,79 @@ def clean_database():
         return False
     return True
 
-def process_image(image_path, db, force_refresh=False):
-    """Process a single image and save results to database"""
+def process_images(image_dir, model, device, force_refresh=False):
+    """Process all images in the directory."""
     try:
-        logging.info(f"Processing {os.path.basename(image_path)}...")
-        
-        # Check if image has already been processed
-        image_name = os.path.basename(image_path)
-        existing_tree = db.get_tree_by_image_path(image_path)
-        
-        if existing_tree and not force_refresh:
-            logging.info(f"Image {image_name} has already been processed, skipping...")
-            return True
-        
-        # Extract location from image
-        logging.info("Extracting location from image...")
-        gps_data = extract_gps_data(image_path)
-        latitude = None
-        longitude = None
-        if gps_data:
-            latitude, longitude = gps_data
-            logging.info(f"GPS coordinates: {latitude}, {longitude}")
-        
-        # Identify tree type
-        logging.info("Identifying tree type...")
-        tree_type, confidence = identify_tree_type(image_path)
-        logging.info(f"Identified as: {tree_type} (confidence: {confidence:.2f}%)")
-        
-        # Calculate tree dimensions
-        logging.info("Calculating tree dimensions...")
-        height_m, width_m = calculate_tree_dimensions(image_path)
-        logging.info(f"Tree dimensions: {height_m:.2f}m height, {width_m:.2f}m width")
-        
-        # Save results to database
-        try:
-            if existing_tree and force_refresh:
-                # Update existing record
-                db.update_tree(existing_tree[0], tree_type, height_m, width_m, latitude, longitude)
-                logging.info("Data updated in database")
-            else:
-                # Add new record
-                db.add_tree(image_path, tree_type, height_m, width_m, latitude, longitude)
-                logging.info("Data saved to database")
-            return True
-        except Exception as e:
-            logging.error(f"Error saving data to database: {str(e)}")
-            return False
-            
-    except Exception as e:
-        logging.error(f"Error processing image {image_path}: {str(e)}")
-        return False
-
-def process_images_in_batches(image_files, db, force_refresh=False, batch_size=10):
-    """Process images in batches with progress tracking"""
-    total_images = len(image_files)
-    processed_count = 0
-    successful_count = 0
-    failed_count = 0
-    skipped_count = 0
-    
-    logging.info(f"Starting to process {total_images} images in batches of {batch_size}")
-    
-    for i in range(0, total_images, batch_size):
-        batch = image_files[i:i + batch_size]
-        for image_file in batch:
-            try:
-                image_path = os.path.join('tree_images', image_file)
-                if process_image(image_path, db, force_refresh):
-                    successful_count += 1
-                else:
-                    failed_count += 1
-                processed_count += 1
-                
-                # Log progress
-                progress = (processed_count / total_images) * 100
-                logging.info(f"Progress: {progress:.1f}% ({processed_count}/{total_images})")
-                
-                # Add a small delay between processing images
-                time.sleep(1)
-                
-            except Exception as e:
-                logging.error(f"Error processing batch: {str(e)}")
-                failed_count += 1
-                processed_count += 1
-                continue
-    
-    return successful_count, failed_count, skipped_count
-
-def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Tree Analysis Application')
-    parser.add_argument('--force-refresh', action='store_true', 
-                      help='Force refresh of all images, even if previously processed')
-    parser.add_argument('--clean-db', action='store_true',
-                      help='Clean the database before processing')
-    parser.add_argument('--ui-only', action='store_true',
-                      help='Launch only the web interface with existing database data')
-    args = parser.parse_args()
-    
-    try:
-        # Load environment variables
-        load_dotenv()
-        
-        # If UI-only mode is requested, just start the interface
-        if args.ui_only:
-            logging.info("Starting web interface with existing database data...")
-            start_web_interface()
-            return
-        
-        # Clean database if requested
-        if args.clean_db:
-            if not clean_database():
-                logging.error("Failed to clean database. Exiting...")
-                return
-        
         # Initialize database
         db = Database()
         
-        # Clean up previously analyzed images
-        cleanup_analyzed_images()
-        
-        # Process all images in tree_images directory
-        image_files = [f for f in os.listdir('tree_images') 
-                      if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')) 
-                      and not f.endswith('_analyzed.jpg')
-                      and not f.endswith('.tmp')]
-        
-        if not image_files:
-            logging.warning("No images found in tree_images directory")
-            return
+        # Get list of images
+        image_files = [f for f in os.listdir(image_dir) 
+                      if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
         
         logging.info(f"Found {len(image_files)} images to process")
         
-        # Process images in batches
-        successful, failed, skipped = process_images_in_batches(
-            image_files, db, force_refresh=args.force_refresh
-        )
+        # Process each image
+        for i, image_file in enumerate(image_files, 1):
+            image_path = os.path.join(image_dir, image_file)
+            
+            # Check if image needs processing
+            if not force_refresh and db.get_tree_by_image_path(image_file):
+                logging.info(f"Skipping {image_file} - already processed")
+                continue
+                
+            logging.info(f"Processing image {i}/{len(image_files)}: {image_file}")
+            
+            # Process image
+            result = process_image(image_path, model, device)
+            
+            if result:
+                # Add to database
+                db.add_tree(
+                    image_path=image_file,
+                    tree_type=result['tree_type'],
+                    height_m=result['height_m'],
+                    width_m=result['width_m']
+                )
+                logging.info(f"Successfully processed {image_file}")
+            else:
+                logging.error(f"Failed to process {image_file}")
+                
+    except Exception as e:
+        logging.error(f"Error processing images: {str(e)}")
+    finally:
+        if 'db' in locals():
+            del db
+
+def main():
+    """Main function to run the tree analysis application."""
+    try:
+        # Download required cascade files
+        logging.info("Downloading required cascade files...")
+        download_cascades()
         
-        # Log final statistics
-        logging.info(f"Processing completed:")
-        logging.info(f"- Total images: {len(image_files)}")
-        logging.info(f"- Successfully processed: {successful}")
-        logging.info(f"- Failed: {failed}")
-        logging.info(f"- Skipped (already processed): {skipped}")
+        # Set image directory
+        image_dir = 'tree_images'
+        if not os.path.exists(image_dir):
+            os.makedirs(image_dir)
+            logging.info(f"Created image directory: {image_dir}")
+            
+        # Load model
+        logging.info("Loading DenseNet model...")
+        model, device = load_model()
+        
+        # Process images
+        process_images(image_dir, model, device)
         
         # Start web interface
-        logging.info("\nStarting web interface...")
+        logging.info("Starting web interface...")
         start_web_interface()
         
     except Exception as e:
-        logging.error(f"Fatal error in main: {str(e)}")
-        sys.exit(1)
+        logging.error(f"Error in main: {str(e)}")
+    finally:
+        if 'model' in locals():
+            del model
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
