@@ -150,11 +150,19 @@ def main():
                       help='Force refresh of all images, even if previously processed')
     parser.add_argument('--clean-db', action='store_true',
                       help='Clean the database before processing')
+    parser.add_argument('--ui-only', action='store_true',
+                      help='Launch only the web interface with existing database data')
     args = parser.parse_args()
     
     try:
         # Load environment variables
         load_dotenv()
+        
+        # If UI-only mode is requested, just start the interface
+        if args.ui_only:
+            logging.info("Starting web interface with existing database data...")
+            start_web_interface()
+            return
         
         # Clean database if requested
         if args.clean_db:
