@@ -76,15 +76,16 @@ def map_view():
         markers = []
         for tree in trees:
             tree_id, tree_type, height, width, lat, lon, image_path, processed_date = tree
+            # Ensure all values are JSON serializable
             marker = {
-                'id': tree_id,
-                'type': tree_type,
-                'height': height,
-                'width': width,
-                'lat': lat,
-                'lon': lon,
-                'image': image_path,
-                'date': processed_date,
+                'id': int(tree_id),
+                'type': str(tree_type),
+                'height': float(height) if height is not None else 0.0,
+                'width': float(width) if width is not None else 0.0,
+                'lat': float(lat) if lat is not None else 0.0,
+                'lon': float(lon) if lon is not None else 0.0,
+                'image': str(image_path),
+                'date': str(processed_date) if processed_date else '',
                 'popup': f'''
                     <div class="tree-popup">
                         <h3>Tree #{tree_id}</h3>
@@ -101,7 +102,7 @@ def map_view():
         return render_template('map.html', markers=markers)
     except Exception as e:
         app.logger.error(f"Error in map view: {str(e)}")
-        return render_template('error.html', error=str(e))
+        return render_template('error.html', error=f"An error occurred while loading the map: {str(e)}")
     finally:
         if 'conn' in locals():
             conn.close()
