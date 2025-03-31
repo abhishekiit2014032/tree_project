@@ -6,7 +6,7 @@ It provides functionality for storing and retrieving tree data using SQLite.
 
 The database schema includes:
 - Tree ID (primary key)
-- Image path
+- Image path (original image only)
 - Tree type
 - Height and width measurements
 - GPS coordinates
@@ -50,7 +50,7 @@ class Database:
         
         conn.commit()
         conn.close()
-    
+
     def get_db_connection(self):
         """
         Create and return a database connection.
@@ -65,7 +65,7 @@ class Database:
         Add a new tree record to the database.
         
         Args:
-            image_path (str): Path to the tree image
+            image_path (str): Path to the original tree image
             tree_type (str): Identified tree species
             height_m (float): Tree height in meters
             width_m (float): Tree width in meters
@@ -73,25 +73,27 @@ class Database:
             longitude (float, optional): GPS longitude
             
         Returns:
-            int: ID of the newly inserted tree record
+            bool: True if insertion was successful, False otherwise
         """
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
+        # Ensure image_path is relative to tree_images directory
+        if image_path.startswith('tree_images\\'):
+            image_path = image_path
+        else:
+            image_path = f"tree_images\\{os.path.basename(image_path)}"
+        
         processed_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         cursor.execute('''
-            INSERT INTO trees (
-                image_path, tree_type, height_m, width_m,
-                latitude, longitude, processed_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO trees (image_path, tree_type, height_m, width_m, latitude, longitude, processed_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (image_path, tree_type, height_m, width_m, latitude, longitude, processed_date))
         
-        tree_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        
-        return tree_id
+        return True
     
     def get_all_trees(self):
         """
@@ -103,7 +105,7 @@ class Database:
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute('SELECT * FROM trees ORDER BY id')
+        cursor.execute('SELECT * FROM trees ORDER BY id DESC')
         trees = cursor.fetchall()
         
         conn.close()
@@ -128,15 +130,15 @@ class Database:
         conn.close()
         return tree
     
-    def update_tree(self, tree_id, tree_type=None, height_m=None, width_m=None, latitude=None, longitude=None):
+    def update_tree(self, tree_id, tree_type, height_m, width_m, latitude=None, longitude=None):
         """
         Update an existing tree record.
         
         Args:
             tree_id (int): ID of the tree to update
-            tree_type (str, optional): New tree species
-            height_m (float, optional): New height in meters
-            width_m (float, optional): New width in meters
+            tree_type (str): New tree species
+            height_m (float): New height in meters
+            width_m (float): New width in meters
             latitude (float, optional): New GPS latitude
             longitude (float, optional): New GPS longitude
             
@@ -146,46 +148,15 @@ class Database:
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
-        # Build update query dynamically based on provided parameters
-        update_fields = []
-        values = []
-        
-        if tree_type is not None:
-            update_fields.append('tree_type = ?')
-            values.append(tree_type)
-        if height_m is not None:
-            update_fields.append('height_m = ?')
-            values.append(height_m)
-        if width_m is not None:
-            update_fields.append('width_m = ?')
-            values.append(width_m)
-        if latitude is not None:
-            update_fields.append('latitude = ?')
-            values.append(latitude)
-        if longitude is not None:
-            update_fields.append('longitude = ?')
-            values.append(longitude)
-        
-        if not update_fields:
-            conn.close()
-            return False
-        
-        # Add tree_id to values
-        values.append(tree_id)
-        
-        # Execute update query
-        query = f'''
+        cursor.execute('''
             UPDATE trees 
-            SET {', '.join(update_fields)}
+            SET tree_type = ?, height_m = ?, width_m = ?, latitude = ?, longitude = ?
             WHERE id = ?
-        '''
+        ''', (tree_type, height_m, width_m, latitude, longitude, tree_id))
         
-        cursor.execute(query, values)
         success = cursor.rowcount > 0
-        
         conn.commit()
         conn.close()
-        
         return success
     
     def delete_tree(self, tree_id):
@@ -208,6 +179,44 @@ class Database:
         conn.close()
         
         return success
+
+    def get_tree_by_image_path(self, image_path):
+        """
+        Retrieve a tree record by its image path.
+        
+        Args:
+            image_path (str): Path to the tree image
+            
+        Returns:
+            tuple: Tree data if found, None otherwise
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM trees WHERE image_path = ?', (image_path,))
+        tree = cursor.fetchone()
+        
+        conn.close()
+        return tree
+
+    def get_tree_by_id(self, tree_id):
+        """
+        Retrieve a tree record by its ID.
+        
+        Args:
+            tree_id (int): ID of the tree to retrieve
+            
+        Returns:
+            tuple: Tree data if found, None otherwise
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM trees WHERE id = ?', (tree_id,))
+        tree = cursor.fetchone()
+        
+        conn.close()
+        return tree
 
 # Create a singleton instance
 _db = None

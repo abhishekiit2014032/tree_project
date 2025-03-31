@@ -31,30 +31,42 @@ def get_db():
 
 @app.route('/')
 def index():
-    """
-    Render the main dashboard page displaying tree analysis results in a table format.
-    
-    Returns:
-        str: Rendered HTML template with tree data
-    """
-    results = get_db().get_all_trees()
-    trees = []
-    for i, result in enumerate(results, start=1):
-        # Extract filename from image_path
-        image_name = os.path.basename(result[1])
-        tree_data = {
-            'id': i,  # Use sequential ID starting from 1
-            'image_name': image_name,
-            'image_path': result[1],
-            'tree_type': result[3],
-            'height_m': result[4],
-            'width_m': result[5],
-            'latitude': result[6],
-            'longitude': result[7],
-            'processed_date': result[8]
-        }
-        trees.append(tree_data)
-    return render_template('index.html', trees=trees)
+    """Display the main page with tree analysis results."""
+    try:
+        # Get all trees from database
+        print("Fetching trees from database...")
+        trees = get_db().get_all_trees()
+        print(f"Found {len(trees)} trees in database")
+        
+        # Format results for display
+        formatted_trees = []
+        for tree in trees:
+            print(f"Processing tree: {tree}")
+            # Extract filename from image_path
+            image_name = os.path.basename(tree[1])
+            
+            # tree tuple contains: (id, image_path, tree_type, height_m, width_m, latitude, longitude, processed_date)
+            tree_data = {
+                'id': tree[0],
+                'image_name': image_name,
+                'image_path': tree[1],
+                'tree_type': tree[2],
+                'height_m': tree[3],
+                'width_m': tree[4],
+                'latitude': tree[5],
+                'longitude': tree[6],
+                'processed_date': tree[7]
+            }
+            formatted_trees.append(tree_data)
+            print(f"Formatted tree data: {tree_data}")
+        
+        print(f"Rendering template with {len(formatted_trees)} trees")
+        return render_template('index.html', trees=formatted_trees)
+    except Exception as e:
+        print(f"Error in index route: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return render_template('index.html', trees=[], error=str(e))
 
 @app.route('/map')
 def map_view():
@@ -79,12 +91,12 @@ def map_view():
             'id': i,
             'image_name': image_name,
             'image_path': result[1],
-            'tree_type': result[3],
-            'height_m': result[4],
-            'width_m': result[5],
-            'latitude': result[6] + lat_offset,
-            'longitude': result[7] + lon_offset,
-            'processed_date': result[8]
+            'tree_type': result[2],
+            'height_m': result[3],
+            'width_m': result[4],
+            'latitude': result[5] + lat_offset,
+            'longitude': result[6] + lon_offset,
+            'processed_date': result[7]
         })
 
     return render_template('map.html', trees=tree_data)
@@ -92,18 +104,38 @@ def map_view():
 @app.route('/images/<filename>')
 def serve_image(filename):
     """
-    Serve tree images from the tree_images directory.
+    Serve original tree images from the tree_images directory.
     
     Args:
         filename (str): Name of the image file to serve
         
     Returns:
-        Response: Image file with appropriate MIME type
+        Response: Original image file with appropriate MIME type
     """
-    return send_file(
-        os.path.join('tree_images', filename),
-        mimetype='image/jpeg'
-    )
+    try:
+        # Try multiple possible paths
+        possible_paths = [
+            os.path.join(TREE_IMAGES_DIR, filename),
+            os.path.join(os.path.dirname(TREE_IMAGES_DIR), 'tree_images', filename),
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_images', filename)
+        ]
+        
+        print(f"Attempting to serve image: {filename}")
+        print(f"Possible paths: {possible_paths}")
+        
+        for image_path in possible_paths:
+            if os.path.exists(image_path):
+                print(f"Found image at: {image_path}")
+                return send_file(image_path, mimetype='image/jpeg')
+        
+        print(f"Image not found at any path: {filename}")
+        return f"Image not found: {filename}", 404
+            
+    except Exception as e:
+        print(f"Error serving image {filename}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return str(e), 404
 
 @app.route('/export')
 def export_to_excel():
@@ -133,12 +165,12 @@ def export_to_excel():
             data.append({
                 'ID': i,  # Use sequential ID starting from 1
                 'Image Name': image_name,
-                'Tree Type': result[3],
-                'Height (m)': f"{result[4]:.2f}",  # Format to 2 decimal places
-                'Width (m)': f"{result[5]:.2f}",   # Format to 2 decimal places
-                'Latitude': f"{result[6]:.6f}" if result[6] else "",
-                'Longitude': f"{result[7]:.6f}" if result[7] else "",
-                'Processed Date': result[8]
+                'Tree Type': result[2],
+                'Height (m)': f"{result[3]:.2f}",  # Format to 2 decimal places
+                'Width (m)': f"{result[4]:.2f}",   # Format to 2 decimal places
+                'Latitude': f"{result[5]:.6f}" if result[5] else "",
+                'Longitude': f"{result[6]:.6f}" if result[6] else "",
+                'Processed Date': result[7]
             })
         
         df = pd.DataFrame(data)
@@ -175,7 +207,7 @@ def export_to_excel():
 
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    """Serve static files (images)"""
+    """Serve static files (original images only)"""
     try:
         return send_from_directory(TREE_IMAGES_DIR, filename, as_attachment=False)
     except Exception as e:
