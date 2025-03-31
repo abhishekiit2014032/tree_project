@@ -19,11 +19,8 @@ from io import BytesIO
 from .database import Database
 from .image_processing import calculate_tree_dimensions
 
-# Get the absolute path to the tree_images directory
-TREE_IMAGES_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_images'))
-
 # Initialize Flask app with the correct static folder
-app = Flask(__name__, static_folder=TREE_IMAGES_DIR, static_url_path='/images')
+app = Flask(__name__, static_folder=os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_images')), static_url_path='/images')
 
 def get_db():
     """Create a new database connection for each request"""
@@ -81,11 +78,20 @@ def map_view():
     for i, result in enumerate(results, start=1):
         # Extract filename from image_path
         image_name = os.path.basename(result[1])
-        # Add a small offset based on the tree's index
-        # This will spread the trees in a small area around the actual GPS coordinates
-        offset = 0.0001  # approximately 10 meters
-        lat_offset = offset * (i % 3)  # spread in 3 columns
-        lon_offset = offset * (i // 3)  # spread in rows
+        
+        # Get GPS coordinates
+        latitude = result[5]
+        longitude = result[6]
+        
+        # Only add offset if we have valid coordinates
+        if latitude is not None and longitude is not None:
+            # Add a small offset based on the tree's index
+            # This will spread the trees in a small area around the actual GPS coordinates
+            offset = 0.0001  # approximately 10 meters
+            lat_offset = offset * (i % 3)  # spread in 3 columns
+            lon_offset = offset * (i // 3)  # spread in rows
+            latitude += lat_offset
+            longitude += lon_offset
         
         tree_data.append({
             'id': i,
@@ -94,42 +100,42 @@ def map_view():
             'tree_type': result[2],
             'height_m': result[3],
             'width_m': result[4],
-            'latitude': result[5] + lat_offset,
-            'longitude': result[6] + lon_offset,
+            'latitude': latitude,
+            'longitude': longitude,
             'processed_date': result[7]
         })
 
     return render_template('map.html', trees=tree_data)
 
-@app.route('/images/<filename>')
+@app.route('/images/<path:filename>')
 def serve_image(filename):
     """
-    Serve original tree images from the tree_images directory.
+    Serve tree images from their original location.
     
     Args:
         filename (str): Name of the image file to serve
         
     Returns:
-        Response: Original image file with appropriate MIME type
+        Response: Image file with appropriate MIME type
     """
     try:
-        # Try multiple possible paths
-        possible_paths = [
-            os.path.join(TREE_IMAGES_DIR, filename),
-            os.path.join(os.path.dirname(TREE_IMAGES_DIR), 'tree_images', filename),
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tree_images', filename)
-        ]
+        # Get the tree data from database to find the full path
+        db = get_db()
+        tree = db.get_tree_by_image_path(filename)
         
-        print(f"Attempting to serve image: {filename}")
-        print(f"Possible paths: {possible_paths}")
+        if not tree:
+            print(f"Image not found in database: {filename}")
+            return f"Image not found: {filename}", 404
+            
+        # Get the full path from the database
+        image_path = tree[1]  # image_path is at index 1 in the tree tuple
+        print(f"Serving image from: {image_path}")
         
-        for image_path in possible_paths:
-            if os.path.exists(image_path):
-                print(f"Found image at: {image_path}")
-                return send_file(image_path, mimetype='image/jpeg')
-        
-        print(f"Image not found at any path: {filename}")
-        return f"Image not found: {filename}", 404
+        if not os.path.exists(image_path):
+            print(f"Image file not found at path: {image_path}")
+            return f"Image file not found: {filename}", 404
+            
+        return send_file(image_path, mimetype='image/jpeg')
             
     except Exception as e:
         print(f"Error serving image {filename}: {str(e)}")
@@ -207,9 +213,25 @@ def export_to_excel():
 
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    """Serve static files (original images only)"""
+    """Serve static files from their original location"""
     try:
-        return send_from_directory(TREE_IMAGES_DIR, filename, as_attachment=False)
+        # Get the tree data from database to find the full path
+        db = get_db()
+        tree = db.get_tree_by_image_path(filename)
+        
+        if not tree:
+            print(f"Image not found in database: {filename}")
+            return f"Image not found: {filename}", 404
+            
+        # Get the full path from the database
+        image_path = tree[1]  # image_path is at index 1 in the tree tuple
+        print(f"Serving static file from: {image_path}")
+        
+        if not os.path.exists(image_path):
+            print(f"Image file not found at path: {image_path}")
+            return f"Image file not found: {filename}", 404
+            
+        return send_file(image_path, mimetype='image/jpeg')
     except Exception as e:
         print(f"Error serving image {filename}: {str(e)}")
         return str(e), 404

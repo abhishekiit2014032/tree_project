@@ -107,6 +107,23 @@ def process_image(image_path, db, force_refresh=False):
         logging.error(f"Error processing image {image_path}: {str(e)}")
         return False
 
+def get_all_images_recursive(directory):
+    """
+    Recursively find all image files in the given directory and its subdirectories.
+    
+    Args:
+        directory (str): Path to the directory to search
+        
+    Returns:
+        list: List of full paths to image files
+    """
+    image_files = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')) and not file.endswith('_analyzed.jpg') and not file.endswith('.tmp'):
+                image_files.append(os.path.join(root, file))
+    return image_files
+
 def process_images_in_batches(image_files, db, force_refresh=False, batch_size=10):
     """Process images in batches with progress tracking"""
     total_images = len(image_files)
@@ -119,9 +136,8 @@ def process_images_in_batches(image_files, db, force_refresh=False, batch_size=1
     
     for i in range(0, total_images, batch_size):
         batch = image_files[i:i + batch_size]
-        for image_file in batch:
+        for image_path in batch:
             try:
-                image_path = os.path.join('tree_images', image_file)
                 if process_image(image_path, db, force_refresh):
                     successful_count += 1
                 else:
@@ -152,6 +168,8 @@ def main():
                       help='Clean the database before processing')
     parser.add_argument('--ui-only', action='store_true',
                       help='Launch only the web interface with existing database data')
+    parser.add_argument('--process-dir', type=str,
+                      help='Process images from specified directory (including subdirectories)')
     args = parser.parse_args()
     
     try:
@@ -175,15 +193,20 @@ def main():
         
         # Clean up previously analyzed images
         cleanup_analyzed_images()
-        
-        # Process all images in tree_images directory
-        image_files = [f for f in os.listdir('tree_images') 
-                      if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')) 
-                      and not f.endswith('_analyzed.jpg')
-                      and not f.endswith('.tmp')]
+
+        # Get images to process
+        if args.process_dir:
+            if not os.path.exists(args.process_dir):
+                logging.error(f"Directory not found: {args.process_dir}")
+                return
+            logging.info(f"Processing images from directory: {args.process_dir}")
+            image_files = get_all_images_recursive(args.process_dir)
+        else:
+            # Process images in tree_images directory
+            image_files = get_all_images_recursive('tree_images')
         
         if not image_files:
-            logging.warning("No images found in tree_images directory")
+            logging.warning("No images found to process")
             return
         
         logging.info(f"Found {len(image_files)} images to process")
@@ -203,7 +226,7 @@ def main():
         # Start web interface
         logging.info("\nStarting web interface...")
         start_web_interface()
-        
+
     except Exception as e:
         logging.error(f"Fatal error in main: {str(e)}")
         sys.exit(1)
