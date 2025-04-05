@@ -39,14 +39,15 @@ def index():
         formatted_trees = []
         for tree in trees:
             print(f"Processing tree: {tree}")
-            # Extract filename from image_path
-            image_name = os.path.basename(tree[1])
+            # Get the full image path from database
+            image_path = tree[1]
+            image_name = os.path.basename(image_path)
             
             # tree tuple contains: (id, image_path, tree_type, height_m, width_m, latitude, longitude, processed_date)
             tree_data = {
                 'id': tree[0],
                 'image_name': image_name,
-                'image_path': tree[1],
+                'image_path': image_path,  # Use full path
                 'tree_type': tree[2],
                 'height_m': tree[3],
                 'width_m': tree[4],
@@ -76,8 +77,9 @@ def map_view():
     results = get_db().get_all_trees()
     tree_data = []
     for i, result in enumerate(results, start=1):
-        # Extract filename from image_path
-        image_name = os.path.basename(result[1])
+        # Get the full image path from database
+        image_path = result[1]
+        image_name = os.path.basename(image_path)
         
         # Get GPS coordinates
         latitude = result[5]
@@ -96,7 +98,7 @@ def map_view():
         tree_data.append({
             'id': i,
             'image_name': image_name,
-            'image_path': result[1],
+            'image_path': image_path,  # Use full path
             'tree_type': result[2],
             'height_m': result[3],
             'width_m': result[4],
@@ -113,12 +115,14 @@ def serve_image(filename):
     Serve tree images from their original location.
     
     Args:
-        filename (str): Name of the image file to serve
+        filename (str): Full path to the image file
         
     Returns:
         Response: Image file with appropriate MIME type
     """
     try:
+        print(f"Attempting to serve image: {filename}")
+        
         # Get the tree data from database to find the full path
         db = get_db()
         tree = db.get_tree_by_image_path(filename)
@@ -215,6 +219,8 @@ def export_to_excel():
 def serve_static(filename):
     """Serve static files from their original location"""
     try:
+        print(f"Attempting to serve static file: {filename}")
+        
         # Get the tree data from database to find the full path
         db = get_db()
         tree = db.get_tree_by_image_path(filename)
@@ -228,12 +234,12 @@ def serve_static(filename):
         print(f"Serving static file from: {image_path}")
         
         if not os.path.exists(image_path):
-            print(f"Image file not found at path: {image_path}")
-            return f"Image file not found: {filename}", 404
+            print(f"File not found at path: {image_path}")
+            return f"File not found: {filename}", 404
             
         return send_file(image_path, mimetype='image/jpeg')
     except Exception as e:
-        print(f"Error serving image {filename}: {str(e)}")
+        print(f"Error serving file {filename}: {str(e)}")
         return str(e), 404
 
 @app.route('/edit_tree/<int:tree_id>', methods=['GET', 'POST'])
