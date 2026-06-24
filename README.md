@@ -5,6 +5,10 @@ A powerful application that combines computer vision and machine learning to ana
 Live At: https://tree-project-bf600.web.app/index.html
          mapView:  https://tree-project-bf600.web.app/map.html
 
+
+
+![Tree Project Demo](https://raw.githubusercontent.com/abhishekiit2014032/tree_project/main/chrome-capture-2026-06-24.gif)
+
 ## ✨ Key Features
 
 ### 🌿 Tree Identification
